@@ -7,10 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { formatFileSize } from "@/lib/format";
+import { RECORDINGS_BUCKET } from "@/lib/meetings";
+import { createClient } from "@/lib/supabase/client";
+import { uploadRecording } from "@/lib/upload-recording";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, FileAudio, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 const ACCEPTED_EXTENSIONS = ["mp3", "m4a", "wav"];
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -29,13 +33,9 @@ function validate(file: File): string | null {
   return null;
 }
 
-function stripExtension(name: string) {
-  return name.replace(/\.[^.]+$/, "");
-}
-
 export function UploadForm() {
   const dragDepth = useRef(0);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortController = useRef<AbortController | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -44,14 +44,13 @@ export function UploadForm() {
   const [status, setStatus] = useState<"idle" | "uploading" | "done">("idle");
   const [progress, setProgress] = useState(0);
 
+  // Stop an upload that is still running if the user leaves the page.
   useEffect(() => {
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
+    return () => abortController.current?.abort();
   }, []);
 
   const isUploading = status === "uploading";
-  const finalTitle = title.trim() || (file ? stripExtension(file.name) : "");
+  const finalTitle = title.trim() || file?.name || "";
 
   const selectFile = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -70,22 +69,42 @@ export function UploadForm() {
     setError(null);
   };
 
-  // Fake upload: fills the progress bar over a few seconds. Nothing is sent.
-  const startUpload = () => {
+  const startUpload = async () => {
     if (!file) return;
     setStatus("uploading");
     setError(null);
-    let current = 0;
-    setProgress(current);
-    timer.current = setInterval(() => {
-      current = Math.min(100, current + 4 + Math.random() * 8);
-      setProgress(current);
-      if (current >= 100 && timer.current) {
-        clearInterval(timer.current);
-        timer.current = null;
-        setStatus("done");
-      }
-    }, 150);
+    setProgress(0);
+    abortController.current = new AbortController();
+
+    let filePath: string;
+    try {
+      filePath = await uploadRecording(file, {
+        onProgress: setProgress,
+        signal: abortController.current.signal,
+      });
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setStatus("idle");
+      toast.error(e instanceof Error ? e.message : "The upload failed.");
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: insertError } = await supabase.from("meetings").insert({
+      title: finalTitle,
+      file_path: filePath,
+      file_size: file.size,
+    });
+    if (insertError) {
+      // Don't leave a recording behind that no meeting points to.
+      await supabase.storage.from(RECORDINGS_BUCKET).remove([filePath]);
+      setStatus("idle");
+      toast.error("The file uploaded, but the meeting couldn't be saved. Please try again.");
+      return;
+    }
+
+    setStatus("done");
+    toast.success(`"${finalTitle}" uploaded`);
   };
 
   const reset = () => {
@@ -106,7 +125,7 @@ export function UploadForm() {
           <div className="flex flex-col gap-1">
             <h2 className="font-medium">&ldquo;{finalTitle}&rdquo; uploaded</h2>
             <p className="text-sm text-muted-foreground">
-              Transcription will start shortly.
+              It&apos;s now in your meetings list.
             </p>
           </div>
           <div className="flex gap-2">
@@ -237,7 +256,7 @@ export function UploadForm() {
             id="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={file ? stripExtension(file.name) : "e.g. Weekly product sync"}
+            placeholder={file ? file.name : "e.g. Weekly product sync"}
             disabled={isUploading}
           />
           <p className="text-xs text-muted-foreground">

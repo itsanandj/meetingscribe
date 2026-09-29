@@ -3,6 +3,7 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { NavUser, NavUserSkeleton } from "@/components/dashboard/nav-user";
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 import { createClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { Suspense } from "react";
@@ -38,6 +39,7 @@ export default function DashboardLayout({
           {children}
         </div>
       </SidebarInset>
+      <Toaster position="bottom-right" />
     </SidebarProvider>
   );
 }

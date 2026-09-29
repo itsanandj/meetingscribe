@@ -15,11 +15,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatFileSize } from "@/lib/format";
-import type { Meeting, MeetingStatus } from "@/lib/mock-meetings";
+import {
+  RECORDINGS_BUCKET,
+  type Meeting,
+  type MeetingStatus,
+} from "@/lib/meetings";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { FileAudio, Trash2, Upload } from "lucide-react";
+import { FileAudio, Loader2, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 
 const statusStyles: Record<MeetingStatus, { label: string; dot: string }> = {
   uploaded: { label: "Uploaded", dot: "bg-muted-foreground" },
@@ -41,9 +48,11 @@ function StatusBadge({ status }: { status: MeetingStatus }) {
 
 function DeleteMeetingButton({
   meeting,
+  isDeleting,
   onDelete,
 }: {
   meeting: Meeting;
+  isDeleting: boolean;
   onDelete: () => void;
 }) {
   return (
@@ -54,8 +63,9 @@ function DeleteMeetingButton({
           size="icon"
           className="shrink-0 text-muted-foreground hover:text-destructive"
           aria-label={`Delete ${meeting.title}`}
+          disabled={isDeleting}
         >
-          <Trash2 />
+          {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
@@ -109,13 +119,42 @@ export function MeetingList({
 }: {
   initialMeetings: Meeting[];
 }) {
-  // Local state only: deleting is not saved, so a reload brings them back.
+  const router = useRouter();
   const [meetings, setMeetings] = useState(initialMeetings);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   if (meetings.length === 0) return <EmptyState />;
 
-  const remove = (id: string) =>
-    setMeetings((current) => current.filter((m) => m.id !== id));
+  // Remove the recording first, then the row, so a row never points to a
+  // file that was kept by mistake.
+  const remove = async (meeting: Meeting) => {
+    setDeletingId(meeting.id);
+    const supabase = createClient();
+
+    const { error: storageError } = await supabase.storage
+      .from(RECORDINGS_BUCKET)
+      .remove([meeting.file_path]);
+    if (storageError) {
+      setDeletingId(null);
+      toast.error(`Couldn't delete "${meeting.title}". Please try again.`);
+      return;
+    }
+
+    const { data: deleted, error: rowError } = await supabase
+      .from("meetings")
+      .delete()
+      .eq("id", meeting.id)
+      .select("id");
+    setDeletingId(null);
+    if (rowError || !deleted?.length) {
+      toast.error(`Couldn't delete "${meeting.title}". Please try again.`);
+      return;
+    }
+
+    setMeetings((current) => current.filter((m) => m.id !== meeting.id));
+    toast.success(`Deleted "${meeting.title}"`);
+    router.refresh();
+  };
 
   return (
     <Card className="shadow-none">
@@ -131,14 +170,15 @@ export function MeetingList({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{meeting.title}</p>
               <p className="text-xs text-muted-foreground">
-                {formatDate(meeting.uploadedAt)} ·{" "}
-                {formatFileSize(meeting.sizeBytes)}
+                {formatDate(meeting.created_at)} ·{" "}
+                {formatFileSize(meeting.file_size)}
               </p>
             </div>
             <StatusBadge status={meeting.status} />
             <DeleteMeetingButton
               meeting={meeting}
-              onDelete={() => remove(meeting.id)}
+              isDeleting={deletingId === meeting.id}
+              onDelete={() => remove(meeting)}
             />
           </li>
         ))}
