@@ -1,15 +1,17 @@
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { UserMenu, UserMenuSkeleton } from "@/components/dashboard/user-menu";
+import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { NavUser, NavUserSkeleton } from "@/components/dashboard/nav-user";
 import { EnvVarWarning } from "@/components/env-var-warning";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { createClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { Suspense } from "react";
 
-async function CurrentUserMenu() {
+async function CurrentNavUser() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
 
-  return <UserMenu email={data?.claims?.email ?? ""} />;
+  return <NavUser email={data?.claims?.email ?? ""} />;
 }
 
 export default function DashboardLayout({
@@ -18,18 +20,24 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <DashboardShell
-      userMenu={
-        !hasEnvVars ? (
-          <EnvVarWarning />
-        ) : (
-          <Suspense fallback={<UserMenuSkeleton />}>
-            <CurrentUserMenu />
-          </Suspense>
-        )
-      }
-    >
-      {children}
-    </DashboardShell>
+    <SidebarProvider className="[--ring:var(--brand)]">
+      <AppSidebar
+        footer={
+          !hasEnvVars ? (
+            <EnvVarWarning />
+          ) : (
+            <Suspense fallback={<NavUserSkeleton />}>
+              <CurrentNavUser />
+            </Suspense>
+          )
+        }
+      />
+      <SidebarInset>
+        <DashboardHeader />
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10 md:px-10 md:py-12">
+          {children}
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
