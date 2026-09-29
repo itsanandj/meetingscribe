@@ -16,14 +16,48 @@ import {
 import { AudioLines, List, Upload } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 
 const navItems = [
   { href: "/dashboard/meetings", label: "Meetings", icon: List },
   { href: "/dashboard/upload", label: "Upload", icon: Upload },
 ];
 
-export function AppSidebar({ footer }: { footer: React.ReactNode }) {
+function NavLinks({ activeHref }: { activeHref?: string }) {
+  const { setOpenMobile } = useSidebar();
+
+  return (
+    <SidebarMenu>
+      {navItems.map(({ href, label, icon: Icon }) => (
+        <SidebarMenuItem key={href}>
+          <SidebarMenuButton
+            asChild
+            tooltip={label}
+            isActive={href === activeHref}
+            className="data-[active=true]:bg-brand/10 data-[active=true]:text-brand"
+          >
+            <Link href={href} onClick={() => setOpenMobile(false)}>
+              <Icon />
+              <span>{label}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
+  );
+}
+
+// Reading the URL can suspend on pages like /dashboard/meetings/[id], so only
+// the highlight waits for it; the links show straight away.
+function ActiveNavLinks() {
   const pathname = usePathname();
+  const active = navItems.find(
+    ({ href }) => pathname === href || pathname.startsWith(`${href}/`),
+  );
+  return <NavLinks activeHref={active?.href} />;
+}
+
+export function AppSidebar({ footer }: { footer: React.ReactNode }) {
   const { setOpenMobile } = useSidebar();
 
   return (
@@ -48,25 +82,9 @@ export function AppSidebar({ footer }: { footer: React.ReactNode }) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map(({ href, label, icon: Icon }) => (
-                <SidebarMenuItem key={href}>
-                  <SidebarMenuButton
-                    asChild
-                    tooltip={label}
-                    isActive={
-                      pathname === href || pathname.startsWith(`${href}/`)
-                    }
-                    className="data-[active=true]:bg-brand/10 data-[active=true]:text-brand"
-                  >
-                    <Link href={href} onClick={() => setOpenMobile(false)}>
-                      <Icon />
-                      <span>{label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            <Suspense fallback={<NavLinks />}>
+              <ActiveNavLinks />
+            </Suspense>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

@@ -1,4 +1,4 @@
-import { RECORDINGS_BUCKET } from "@/lib/meetings";
+import { isMeetingId, RECORDINGS_BUCKET } from "@/lib/meetings";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { transcribeAudio } from "@/lib/transcribe";
@@ -6,9 +6,6 @@ import { NextResponse } from "next/server";
 
 // Long recordings can take a few minutes to transcribe.
 export const maxDuration = 300;
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function errorResponse(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -24,7 +21,7 @@ export async function POST(
   const { data: auth } = await supabase.auth.getClaims();
   if (!auth?.claims) return errorResponse("Please sign in.", 401);
 
-  if (!UUID_PATTERN.test(id)) return errorResponse("Meeting not found.", 404);
+  if (!isMeetingId(id)) return errorResponse("Meeting not found.", 404);
 
   // The user's own client: Row Level Security only returns their meetings.
   const { data: meeting, error: loadError } = await supabase

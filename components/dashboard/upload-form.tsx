@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { formatFileSize } from "@/lib/format";
 import { RECORDINGS_BUCKET } from "@/lib/meetings";
+import { requestTranscription } from "@/lib/request-transcription";
 import { createClient } from "@/lib/supabase/client";
 import { uploadRecording } from "@/lib/upload-recording";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ export function UploadForm() {
   const [isDragging, setIsDragging] = useState(false);
   const [status, setStatus] = useState<"idle" | "uploading" | "done">("idle");
   const [progress, setProgress] = useState(0);
+  const [meetingId, setMeetingId] = useState<string | null>(null);
 
   // Stop an upload that is still running if the user leaves the page.
   useEffect(() => {
@@ -90,11 +92,11 @@ export function UploadForm() {
     }
 
     const supabase = createClient();
-    const { error: insertError } = await supabase.from("meetings").insert({
-      title: finalTitle,
-      file_path: filePath,
-      file_size: file.size,
-    });
+    const { data: meeting, error: insertError } = await supabase
+      .from("meetings")
+      .insert({ title: finalTitle, file_path: filePath, file_size: file.size })
+      .select("id")
+      .single();
     if (insertError) {
       // Don't leave a recording behind that no meeting points to.
       await supabase.storage.from(RECORDINGS_BUCKET).remove([filePath]);
@@ -103,8 +105,17 @@ export function UploadForm() {
       return;
     }
 
+    setMeetingId(meeting.id);
     setStatus("done");
-    toast.success(`"${finalTitle}" uploaded`);
+    toast.success(`"${finalTitle}" uploaded. Transcribing now…`);
+
+    // Not awaited: transcription can take minutes, and the user may move on.
+    // The toast still appears on whichever dashboard page they're on.
+    const uploadedTitle = finalTitle;
+    void requestTranscription(meeting.id).then((result) => {
+      if (result.ok) toast.success(`Transcript ready for "${uploadedTitle}"`);
+      else toast.error(`"${uploadedTitle}": ${result.message}`);
+    });
   };
 
   const reset = () => {
@@ -112,6 +123,7 @@ export function UploadForm() {
     setTitle("");
     setError(null);
     setProgress(0);
+    setMeetingId(null);
     setStatus("idle");
   };
 
@@ -125,7 +137,7 @@ export function UploadForm() {
           <div className="flex flex-col gap-1">
             <h2 className="font-medium">&ldquo;{finalTitle}&rdquo; uploaded</h2>
             <p className="text-sm text-muted-foreground">
-              It&apos;s now in your meetings list.
+              Transcribing now. This usually takes a minute or two.
             </p>
           </div>
           <div className="flex gap-2">
@@ -133,7 +145,7 @@ export function UploadForm() {
               Upload another
             </Button>
             <Button asChild>
-              <Link href="/dashboard/meetings">View meetings</Link>
+              <Link href={`/dashboard/meetings/${meetingId}`}>View meeting</Link>
             </Button>
           </div>
         </CardContent>

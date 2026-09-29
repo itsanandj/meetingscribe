@@ -11,40 +11,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatFileSize } from "@/lib/format";
-import {
-  RECORDINGS_BUCKET,
-  type Meeting,
-  type MeetingStatus,
-} from "@/lib/meetings";
+import { RECORDINGS_BUCKET, type Meeting } from "@/lib/meetings";
+import { isInProgress } from "@/lib/request-transcription";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
 import { FileAudio, Loader2, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-
-const statusStyles: Record<MeetingStatus, { label: string; dot: string }> = {
-  uploaded: { label: "Uploaded", dot: "bg-muted-foreground" },
-  transcribing: { label: "Transcribing", dot: "bg-brand animate-pulse" },
-  done: { label: "Done", dot: "bg-emerald-500" },
-  failed: { label: "Failed", dot: "bg-destructive" },
-};
-
-function StatusBadge({ status }: { status: MeetingStatus }) {
-  const { label, dot } = statusStyles[status];
-
-  return (
-    <Badge variant="outline" className="shrink-0 gap-1.5 font-normal">
-      <span className={cn("size-1.5 rounded-full", dot)} />
-      {label}
-    </Badge>
-  );
-}
+import { RefreshWhile } from "./refresh-while";
+import { RetryTranscriptionButton } from "./retry-transcription-button";
+import { StatusBadge } from "./status-badge";
 
 function DeleteMeetingButton({
   meeting,
@@ -120,8 +100,11 @@ export function MeetingList({
   initialMeetings: Meeting[];
 }) {
   const router = useRouter();
-  const [meetings, setMeetings] = useState(initialMeetings);
+  // The list comes from the server and refreshes as statuses change; only
+  // hide the meetings deleted here until the next refresh catches up.
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const meetings = initialMeetings.filter((m) => !deletedIds.includes(m.id));
 
   if (meetings.length === 0) return <EmptyState />;
 
@@ -151,35 +134,51 @@ export function MeetingList({
       return;
     }
 
-    setMeetings((current) => current.filter((m) => m.id !== meeting.id));
+    setDeletedIds((current) => [...current, meeting.id]);
     toast.success(`Deleted "${meeting.title}"`);
     router.refresh();
   };
 
   return (
-    <Card className="shadow-none">
+    <Card className="overflow-hidden shadow-none">
+      <RefreshWhile active={meetings.some(isInProgress)} />
       <ul className="divide-y">
         {meetings.map((meeting) => (
           <li
             key={meeting.id}
-            className="flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5"
+            className="relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4 sm:px-5"
           >
             <div className="hidden size-9 shrink-0 items-center justify-center rounded-md bg-muted sm:flex">
               <FileAudio className="size-4 text-muted-foreground" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{meeting.title}</p>
+              {/* The link covers the whole row; the buttons sit above it. */}
+              <Link
+                href={`/dashboard/meetings/${meeting.id}`}
+                className="block truncate text-sm font-medium after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring"
+              >
+                {meeting.title}
+              </Link>
               <p className="text-xs text-muted-foreground">
                 {formatDate(meeting.created_at)} ·{" "}
                 {formatFileSize(meeting.file_size)}
               </p>
             </div>
+            {meeting.status === "failed" && (
+              <RetryTranscriptionButton
+                meetingId={meeting.id}
+                title={meeting.title}
+                className="relative hidden sm:inline-flex"
+              />
+            )}
             <StatusBadge status={meeting.status} />
-            <DeleteMeetingButton
-              meeting={meeting}
-              isDeleting={deletingId === meeting.id}
-              onDelete={() => remove(meeting)}
-            />
+            <div className="relative">
+              <DeleteMeetingButton
+                meeting={meeting}
+                isDeleting={deletingId === meeting.id}
+                onDelete={() => remove(meeting)}
+              />
+            </div>
           </li>
         ))}
       </ul>
