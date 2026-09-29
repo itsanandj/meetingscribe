@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { formatFileSize } from "@/lib/format";
 import { RECORDINGS_BUCKET } from "@/lib/meetings";
-import { requestTranscription } from "@/lib/request-transcription";
+import { processMeeting } from "@/lib/process-meeting";
 import { createClient } from "@/lib/supabase/client";
 import { uploadRecording } from "@/lib/upload-recording";
 import { cn } from "@/lib/utils";
@@ -109,11 +109,15 @@ export function UploadForm() {
     setStatus("done");
     toast.success(`"${finalTitle}" uploaded. Transcribing now…`);
 
-    // Not awaited: transcription can take minutes, and the user may move on.
-    // The toast still appears on whichever dashboard page they're on.
+    // Not awaited: transcribing and summarizing can take minutes, and the
+    // user may move on. Toasts still appear on any dashboard page.
     const uploadedTitle = finalTitle;
-    void requestTranscription(meeting.id).then((result) => {
-      if (result.ok) toast.success(`Transcript ready for "${uploadedTitle}"`);
+    void processMeeting(meeting.id, {
+      hasTranscript: false,
+      onTranscribed: () =>
+        toast(`Transcript ready for "${uploadedTitle}". Summarizing now…`),
+    }).then((result) => {
+      if (result.ok) toast.success(`Summary ready for "${uploadedTitle}"`);
       else toast.error(`"${uploadedTitle}": ${result.message}`);
     });
   };
@@ -137,7 +141,8 @@ export function UploadForm() {
           <div className="flex flex-col gap-1">
             <h2 className="font-medium">&ldquo;{finalTitle}&rdquo; uploaded</h2>
             <p className="text-sm text-muted-foreground">
-              Transcribing now. This usually takes a minute or two.
+              Transcribing and summarizing now. This usually takes a minute or
+              two.
             </p>
           </div>
           <div className="flex gap-2">

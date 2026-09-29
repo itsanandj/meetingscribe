@@ -1,20 +1,26 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { requestTranscription } from "@/lib/request-transcription";
+import { processMeeting } from "@/lib/process-meeting";
 import { Loader2, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+/**
+ * Picks up where a meeting stopped: transcribes it if there's no transcript
+ * yet, then summarizes it.
+ */
 export function RetryTranscriptionButton({
   meetingId,
   title,
+  hasTranscript,
   label = "Try again",
   className,
 }: {
   meetingId: string;
   title: string;
+  hasTranscript?: boolean;
   label?: string;
   className?: string;
 }) {
@@ -23,14 +29,17 @@ export function RetryTranscriptionButton({
 
   const retry = async () => {
     setIsPending(true);
-    // The route marks the meeting "transcribing" right away, but only answers
-    // when it's finished, so show the new status before then.
+    // Each route updates the status right away but only answers when it's
+    // finished, so show the new status before then.
     const showProgress = setTimeout(() => router.refresh(), 1000);
-    const result = await requestTranscription(meetingId);
+    const result = await processMeeting(meetingId, {
+      hasTranscript,
+      onTranscribed: () => router.refresh(),
+    });
     clearTimeout(showProgress);
     setIsPending(false);
     if (result.ok) {
-      toast.success(`Transcript ready for "${title}"`);
+      toast.success(`Summary ready for "${title}"`);
     } else {
       toast.error(result.message);
     }

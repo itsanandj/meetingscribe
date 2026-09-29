@@ -12,12 +12,12 @@ Read the transcript and return:
 - action_items: every task someone agreed to do, each with:
   - task: what needs to be done.
   - owner: who will do it, as named in the meeting.
-  - due_date: when it is due, exactly as said in the meeting (for example "Friday" or "end of the month").
+  - due: when it is due, exactly as said in the meeting (for example "Friday" or "end of the month").
 
 Rules:
 - Only include what was actually said. Never invent decisions, owners, or dates.
 - If nobody owns a task, set owner to null.
-- If no date was said for a task, set due_date to null.
+- If no date was said for a task, set due to null.
 - If there were no decisions, return an empty decisions list. If there were no action items, return an empty action_items list.
 - Write in the same language as the transcript.
 
@@ -26,7 +26,7 @@ Respond with only a JSON object in exactly this shape, and nothing else:
   "summary": "string",
   "decisions": ["string"],
   "action_items": [
-    { "task": "string", "owner": "string or null", "due_date": "string or null" }
+    { "task": "string", "owner": "string or null", "due": "string or null" }
   ]
 }
 
@@ -47,8 +47,8 @@ Answer:
   "summary": "The team discussed the product launch planned for the 14th. Engineering is ready, but the help docs are not written yet. The team agreed to move the launch to the 21st to finish the documentation. Beta users will be told about the new date.",
   "decisions": ["Move the launch from the 14th to the 21st."],
   "action_items": [
-    { "task": "Write the help docs", "owner": "Priya", "due_date": "next Wednesday" },
-    { "task": "Update the pricing page", "owner": null, "due_date": null },
-    { "task": "Email the beta users about the new launch date", "owner": "Maya", "due_date": "tomorrow" }
+    { "task": "Write the help docs", "owner": "Priya", "due": "next Wednesday" },
+    { "task": "Update the pricing page", "owner": null, "due": null },
+    { "task": "Email the beta users about the new launch date", "owner": "Maya", "due": "tomorrow" }
   ]
 }`;

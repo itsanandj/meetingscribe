@@ -1,70 +1,100 @@
+import { SummarySections } from "@/components/dashboard/summary-sections";
 import { RefreshWhile } from "@/components/dashboard/refresh-while";
 import { RetryTranscriptionButton } from "@/components/dashboard/retry-transcription-button";
 import { StatusBadge } from "@/components/dashboard/status-badge";
+import { TranscriptSection } from "@/components/dashboard/transcript-section";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate, formatFileSize } from "@/lib/format";
 import { isMeetingId, type Meeting } from "@/lib/meetings";
-import { isInProgress } from "@/lib/request-transcription";
+import { isInProgress } from "@/lib/process-meeting";
 import { createClient } from "@/lib/supabase/server";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-function TranscriptBody({ meeting }: { meeting: Meeting }) {
-  if (meeting.status === "done") {
-    return meeting.transcript ? (
-      <p className="whitespace-pre-wrap text-sm leading-7">
-        {meeting.transcript}
-      </p>
-    ) : (
-      <p className="text-sm text-muted-foreground">
-        No speech was found in this recording.
-      </p>
+function MessageCard({ children }: { children: React.ReactNode }) {
+  return (
+    <Card className="shadow-none">
+      <CardContent className="flex flex-col items-start gap-3 pt-6 text-sm text-muted-foreground">
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Everything above the transcript, depending on how far the meeting got. */
+function MeetingBody({ meeting }: { meeting: Meeting }) {
+  const hasTranscript = meeting.transcript != null;
+
+  if (isInProgress(meeting)) {
+    return (
+      <MessageCard>
+        <p className="flex items-center gap-2">
+          <Loader2 className="size-4 animate-spin" />
+          {meeting.status === "summarizing"
+            ? "Summarizing the transcript."
+            : "Transcribing the recording."}{" "}
+          This usually takes a minute or two, and this page updates by itself.
+        </p>
+      </MessageCard>
     );
   }
 
   if (meeting.status === "failed") {
     return (
-      <div className="flex flex-col items-start gap-3">
-        <p className="text-sm text-muted-foreground">
-          Transcription didn&apos;t work this time.
+      <MessageCard>
+        <p>
+          {hasTranscript
+            ? "The transcript is ready, but the summary didn't work this time."
+            : "Transcription didn't work this time."}
         </p>
-        <RetryTranscriptionButton meetingId={meeting.id} title={meeting.title} />
-      </div>
+        <RetryTranscriptionButton
+          meetingId={meeting.id}
+          title={meeting.title}
+          hasTranscript={hasTranscript}
+        />
+      </MessageCard>
     );
   }
 
-  if (isInProgress(meeting)) {
+  if (meeting.status === "done") {
+    if (meeting.summary) return <SummarySections summary={meeting.summary} />;
+    if (!meeting.transcript?.trim()) {
+      return (
+        <MessageCard>
+          <p>No speech was found in this recording.</p>
+        </MessageCard>
+      );
+    }
+    // Transcribed before summaries existed.
     return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        Transcribing. This usually takes a minute or two, and this page updates
-        by itself.
-      </p>
+      <MessageCard>
+        <p>This meeting doesn&apos;t have a summary yet.</p>
+        <RetryTranscriptionButton
+          meetingId={meeting.id}
+          title={meeting.title}
+          hasTranscript
+          label="Summarize"
+        />
+      </MessageCard>
     );
   }
 
-  // Uploaded a while ago and never transcribed, e.g. before transcription
-  // started automatically.
+  // Uploaded a while ago and never processed, e.g. before it started
+  // automatically.
   return (
-    <div className="flex flex-col items-start gap-3">
-      <p className="text-sm text-muted-foreground">
-        This recording hasn&apos;t been transcribed yet.
-      </p>
+    <MessageCard>
+      <p>This recording hasn&apos;t been transcribed yet.</p>
       <RetryTranscriptionButton
         meetingId={meeting.id}
         title={meeting.title}
+        hasTranscript={false}
         label="Transcribe"
       />
-    </div>
+    </MessageCard>
   );
 }
 
@@ -76,7 +106,9 @@ async function MeetingDetails({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("meetings")
-    .select("id, title, file_path, file_size, status, created_at, transcript")
+    .select(
+      "id, title, file_path, file_size, status, created_at, transcript, summary",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -94,9 +126,9 @@ async function MeetingDetails({ params }: { params: Promise<{ id: string }> }) {
   const meeting = data as Meeting;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <RefreshWhile active={isInProgress(meeting)} />
-      <header className="flex flex-col gap-3">
+      <header className="mb-2 flex flex-col gap-3">
         <h1 className="break-words text-2xl font-semibold tracking-tight">
           {meeting.title}
         </h1>
@@ -107,14 +139,10 @@ async function MeetingDetails({ params }: { params: Promise<{ id: string }> }) {
           <span>{formatFileSize(meeting.file_size)}</span>
         </div>
       </header>
-      <Card className="shadow-none">
-        <CardHeader>
-          <CardTitle>Transcript</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TranscriptBody meeting={meeting} />
-        </CardContent>
-      </Card>
+      <MeetingBody meeting={meeting} />
+      {meeting.transcript?.trim() && (
+        <TranscriptSection transcript={meeting.transcript} />
+      )}
     </div>
   );
 }

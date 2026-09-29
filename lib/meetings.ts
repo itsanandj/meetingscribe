@@ -1,6 +1,24 @@
 export const RECORDINGS_BUCKET = "recordings";
 
-export type MeetingStatus = "uploaded" | "transcribing" | "done" | "failed";
+export type MeetingStatus =
+  | "uploaded"
+  | "transcribing"
+  | "summarizing"
+  | "done"
+  | "failed";
+
+// The shape of meetings.summary, fixed by the Structured Outputs schema.
+export type ActionItem = {
+  task: string;
+  owner: string | null;
+  due: string | null;
+};
+
+export type MeetingSummary = {
+  summary: string;
+  decisions: string[];
+  action_items: ActionItem[];
+};
 
 // One row of the public.meetings table.
 export type Meeting = {
@@ -11,6 +29,7 @@ export type Meeting = {
   status: MeetingStatus;
   created_at: string;
   transcript?: string | null;
+  summary?: MeetingSummary | null;
 };
 
 const MEETING_ID_PATTERN =
