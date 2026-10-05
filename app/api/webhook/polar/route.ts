@@ -1,5 +1,5 @@
 import { getProProductId, PRO_PLAN } from "@/lib/plans";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { webhooks } from "@polar-sh/sdk/2026-10";
 import { Webhooks } from "@polar-sh/nextjs";
 import type { NextRequest } from "next/server";
@@ -40,7 +40,7 @@ async function handleOrderPaid({ type, data: order }: webhooks.WebhookOrderPaidP
     return;
   }
 
-  const { error } = await supabaseAdmin.from("credit_ledger").insert({
+  const { error } = await getSupabaseAdmin().from("credit_ledger").insert({
     user_id: userId,
     amount: PRO_PLAN.creditsPerMonth,
     reason: "Pro plan — monthly credits",
@@ -76,7 +76,7 @@ async function handleSubscription({ type, data: subscription }: SubscriptionPayl
     return;
   }
 
-  const { error } = await supabaseAdmin.from("subscriptions").upsert(
+  const { error } = await getSupabaseAdmin().from("subscriptions").upsert(
     {
       user_id: userId,
       polar_customer_id: subscription.customer_id,

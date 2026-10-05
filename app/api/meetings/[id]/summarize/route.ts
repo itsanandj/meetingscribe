@@ -1,5 +1,5 @@
 import { isMeetingId } from "@/lib/meetings";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { summarizeTranscript } from "@/lib/transcribe";
 import { NextResponse } from "next/server";
@@ -58,7 +58,7 @@ export async function POST(
 
   // Claims the meeting in one step. The database decides: only after a
   // transcript is saved, one meeting at a time, and 3 tries. Never charges.
-  const { data: result, error: startError } = await supabaseAdmin.rpc(
+  const { data: result, error: startError } = await getSupabaseAdmin().rpc(
     "start_summary",
     { p_meeting_id: meeting.id, p_user_id: auth.claims.sub },
   );
@@ -77,7 +77,7 @@ export async function POST(
       ? await summarizeTranscript(meeting.transcript)
       : null;
 
-    const { error: saveError } = await supabaseAdmin
+    const { error: saveError } = await getSupabaseAdmin()
       .from("meetings")
       .update({ summary, status: "done" })
       .eq("id", meeting.id);
@@ -86,7 +86,7 @@ export async function POST(
     return NextResponse.json({ status: "done" });
   } catch (error) {
     console.error(`Summary of meeting ${meeting.id} failed:`, error);
-    const { error: failError } = await supabaseAdmin
+    const { error: failError } = await getSupabaseAdmin()
       .from("meetings")
       .update({ status: "failed" })
       .eq("id", meeting.id);

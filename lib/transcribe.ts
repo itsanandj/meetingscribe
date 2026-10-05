@@ -9,9 +9,16 @@ import type { Response } from "openai/resources/responses/responses";
 // high-volume tasks", and it supports Structured Outputs.
 const SUMMARY_MODEL = "gpt-6-luna";
 
+let openaiClient: OpenAI | undefined;
+
 // Reads OPENAI_API_KEY. Gives up after 4 minutes without retrying, so the
 // API routes (300 seconds max) still have time to mark the meeting as failed.
-const openai = new OpenAI({ timeout: 4 * 60 * 1000, maxRetries: 0 });
+// Created on first use, not when the file loads, so `next build` works
+// without the key.
+function getOpenAI(): OpenAI {
+  openaiClient ??= new OpenAI({ timeout: 4 * 60 * 1000, maxRetries: 0 });
+  return openaiClient;
+}
 
 /**
  * Turns an audio file into transcript text. The file name's extension
@@ -21,7 +28,7 @@ export async function transcribeAudio(
   audio: Blob,
   fileName: string,
 ): Promise<string> {
-  const transcription = await openai.audio.transcriptions.create({
+  const transcription = await getOpenAI().audio.transcriptions.create({
     file: await toFile(audio, fileName),
     model: "gpt-transcribe",
   });
@@ -78,7 +85,7 @@ export async function summarizeTranscript(
   let lastProblem = "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const response = await openai.responses.create(
+    const response = await getOpenAI().responses.create(
       {
         model: SUMMARY_MODEL,
         reasoning: { effort: "low" },

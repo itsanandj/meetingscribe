@@ -1,6 +1,6 @@
 import { isMeetingId, RECORDINGS_BUCKET } from "@/lib/meetings";
 import { FREE_PLAN } from "@/lib/plans";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { transcribeAudio } from "@/lib/transcribe";
 import { NextResponse } from "next/server";
@@ -56,7 +56,7 @@ export async function POST(
 
   // Claims the meeting and takes its credit in one step. The database
   // decides: one meeting at a time, 3 tries, and one credit per meeting.
-  const { data: result, error: startError } = await supabaseAdmin.rpc(
+  const { data: result, error: startError } = await getSupabaseAdmin().rpc(
     "start_transcription",
     {
       p_meeting_id: meeting.id,
@@ -84,7 +84,7 @@ export async function POST(
     const fileName = meeting.file_path.split("/").pop()!;
     const transcript = await transcribeAudio(audio, fileName);
 
-    const { error: saveError } = await supabaseAdmin
+    const { error: saveError } = await getSupabaseAdmin()
       .from("meetings")
       .update({ transcript, status: "transcribed" })
       .eq("id", meeting.id);
@@ -94,7 +94,7 @@ export async function POST(
     return NextResponse.json({ status: "transcribed" });
   } catch (error) {
     console.error(`Transcription of meeting ${meeting.id} failed:`, error);
-    const { error: failError } = await supabaseAdmin
+    const { error: failError } = await getSupabaseAdmin()
       .from("meetings")
       .update({ status: "failed" })
       .eq("id", meeting.id);
