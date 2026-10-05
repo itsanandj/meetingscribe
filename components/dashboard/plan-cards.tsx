@@ -29,9 +29,20 @@ const STATUS_LABELS: Record<string, string> = {
   canceled: "Canceled",
 };
 
-export function FreePlanCard() {
-  // Counted properly in Lesson 13; for now everyone has the full allowance.
-  const meetingsLeft = meetingsFor(FREE_PLAN.credits);
+function MeetingsLeft({ count }: { count: number }) {
+  return (
+    <p className="flex items-baseline gap-1.5">
+      <span className="text-2xl font-semibold tabular-nums tracking-tight">
+        {count}
+      </span>
+      <span className="text-sm text-muted-foreground">
+        {count === 1 ? "meeting" : "meetings"} left
+      </span>
+    </p>
+  );
+}
+
+export function FreePlanCard({ meetingsLeft }: { meetingsLeft: number }) {
   const totalMeetings = meetingsFor(FREE_PLAN.credits);
   const proMeetings = meetingsFor(PRO_PLAN.creditsPerMonth);
 
@@ -44,9 +55,12 @@ export function FreePlanCard() {
             <Badge variant="secondary">{FREE_PLAN.name}</Badge>
           </div>
           <CardDescription>
-            {meetingsLeft} of {totalMeetings} free meetings left.
+            {totalMeetings} free meetings when you sign up.
           </CardDescription>
         </CardHeader>
+        <CardContent>
+          <MeetingsLeft count={meetingsLeft} />
+        </CardContent>
       </Card>
 
       <Card className="shadow-none">
@@ -97,7 +111,13 @@ function renewalText({
   return `Renews on ${date}`;
 }
 
-export function ProPlanCard({ subscription }: { subscription: Subscription }) {
+export function ProPlanCard({
+  subscription,
+  meetingsLeft,
+}: {
+  subscription: Subscription;
+  meetingsLeft: number;
+}) {
   const proMeetings = meetingsFor(PRO_PLAN.creditsPerMonth);
   const renewal = renewalText(subscription);
 
@@ -115,11 +135,10 @@ export function ProPlanCard({ subscription }: { subscription: Subscription }) {
           {PRO_PLAN.interval}
         </CardDescription>
       </CardHeader>
-      {renewal && (
-        <CardContent>
-          <p className="text-sm">{renewal}</p>
-        </CardContent>
-      )}
+      <CardContent className="flex flex-col gap-2">
+        <MeetingsLeft count={meetingsLeft} />
+        {renewal && <p className="text-sm text-muted-foreground">{renewal}</p>}
+      </CardContent>
       <CardFooter className="justify-between gap-4 border-t pt-6">
         <p className="text-xs text-muted-foreground">
           Change your card, cancel, or download invoices.

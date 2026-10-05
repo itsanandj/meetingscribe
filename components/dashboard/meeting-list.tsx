@@ -15,7 +15,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatFileSize } from "@/lib/format";
 import { RECORDINGS_BUCKET, type Meeting } from "@/lib/meetings";
-import { isInProgress } from "@/lib/process-meeting";
+import { canRetry, isInProgress } from "@/lib/process-meeting";
 import { createClient } from "@/lib/supabase/client";
 import { FileAudio, Loader2, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
@@ -164,7 +164,7 @@ export function MeetingList({
                 {formatFileSize(meeting.file_size)}
               </p>
             </div>
-            {meeting.status === "failed" && (
+            {canRetry(meeting) && (
               <RetryTranscriptionButton
                 meetingId={meeting.id}
                 title={meeting.title}

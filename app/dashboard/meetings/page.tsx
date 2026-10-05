@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Meeting } from "@/lib/meetings";
+import { MEETING_COLUMNS, type Meeting } from "@/lib/meetings";
 import { createClient } from "@/lib/supabase/server";
 import { AlertCircle, Upload } from "lucide-react";
 import Link from "next/link";
@@ -14,7 +14,7 @@ async function Meetings() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("meetings")
-    .select("id, title, file_path, file_size, status, created_at")
+    .select(MEETING_COLUMNS)
     .order("created_at", { ascending: false });
 
   if (error) {

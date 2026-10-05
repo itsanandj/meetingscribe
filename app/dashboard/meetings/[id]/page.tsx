@@ -1,3 +1,4 @@
+import { AutoStart } from "@/components/dashboard/auto-start";
 import { SummarySections } from "@/components/dashboard/summary-sections";
 import { RefreshWhile } from "@/components/dashboard/refresh-while";
 import { RetryTranscriptionButton } from "@/components/dashboard/retry-transcription-button";
@@ -7,8 +8,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate, formatFileSize } from "@/lib/format";
-import { isMeetingId, type Meeting } from "@/lib/meetings";
-import { isInProgress } from "@/lib/process-meeting";
+import {
+  isMeetingId,
+  MAX_ATTEMPTS,
+  MEETING_COLUMNS,
+  type Meeting,
+} from "@/lib/meetings";
+import { canRetry, isInProgress, isStuck } from "@/lib/process-meeting";
 import { createClient } from "@/lib/supabase/server";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -25,37 +31,77 @@ function MessageCard({ children }: { children: React.ReactNode }) {
   );
 }
 
+function ContactSupport() {
+  return (
+    <p>
+      This has been tried {MAX_ATTEMPTS} times without success. Please contact
+      support and we&apos;ll sort it out.
+    </p>
+  );
+}
+
 /** Everything above the transcript, depending on how far the meeting got. */
-function MeetingBody({ meeting }: { meeting: Meeting }) {
+function MeetingBody({
+  meeting,
+  otherInProgress,
+}: {
+  meeting: Meeting;
+  otherInProgress: boolean;
+}) {
   const hasTranscript = meeting.transcript != null;
+
+  if (meeting.status === "failed" || isStuck(meeting)) {
+    return (
+      <MessageCard>
+        <p>
+          {meeting.status === "failed"
+            ? hasTranscript
+              ? "The transcript is ready, but the summary didn't work this time."
+              : "Transcription didn't work this time."
+            : "This meeting stopped making progress."}
+        </p>
+        {canRetry(meeting) ? (
+          <RetryTranscriptionButton
+            meetingId={meeting.id}
+            title={meeting.title}
+            hasTranscript={hasTranscript}
+          />
+        ) : (
+          <ContactSupport />
+        )}
+      </MessageCard>
+    );
+  }
+
+  // Uploaded but not started yet: start it here, or wait for the other one.
+  if (
+    isInProgress(meeting) &&
+    meeting.status === "uploaded" &&
+    meeting.transcribe_attempts === 0
+  ) {
+    return (
+      <MessageCard>
+        <AutoStart meetingId={meeting.id} />
+        <p className="flex items-center gap-2">
+          <Loader2 className="size-4 animate-spin" />
+          {otherInProgress
+            ? "Waiting for your other meeting to finish. This one starts by itself."
+            : "Starting…"}
+        </p>
+      </MessageCard>
+    );
+  }
 
   if (isInProgress(meeting)) {
     return (
       <MessageCard>
         <p className="flex items-center gap-2">
           <Loader2 className="size-4 animate-spin" />
-          {meeting.status === "summarizing"
-            ? "Summarizing the transcript."
-            : "Transcribing the recording."}{" "}
+          {meeting.status === "transcribing"
+            ? "Transcribing the recording."
+            : "Summarizing the transcript."}{" "}
           This usually takes a minute or two, and this page updates by itself.
         </p>
-      </MessageCard>
-    );
-  }
-
-  if (meeting.status === "failed") {
-    return (
-      <MessageCard>
-        <p>
-          {hasTranscript
-            ? "The transcript is ready, but the summary didn't work this time."
-            : "Transcription didn't work this time."}
-        </p>
-        <RetryTranscriptionButton
-          meetingId={meeting.id}
-          title={meeting.title}
-          hasTranscript={hasTranscript}
-        />
       </MessageCard>
     );
   }
@@ -69,16 +115,12 @@ function MeetingBody({ meeting }: { meeting: Meeting }) {
         </MessageCard>
       );
     }
-    // Transcribed before summaries existed.
     return (
       <MessageCard>
-        <p>This meeting doesn&apos;t have a summary yet.</p>
-        <RetryTranscriptionButton
-          meetingId={meeting.id}
-          title={meeting.title}
-          hasTranscript
-          label="Summarize"
-        />
+        <p>
+          This meeting was processed before summaries were added, so it only
+          has a transcript.
+        </p>
       </MessageCard>
     );
   }
@@ -106,9 +148,7 @@ async function MeetingDetails({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("meetings")
-    .select(
-      "id, title, file_path, file_size, status, created_at, transcript, summary",
-    )
+    .select(`${MEETING_COLUMNS}, transcript, summary`)
     .eq("id", id)
     .maybeSingle();
 
@@ -125,6 +165,13 @@ async function MeetingDetails({ params }: { params: Promise<{ id: string }> }) {
   if (!data) notFound();
   const meeting = data as Meeting;
 
+  // Another of the user's meetings in progress means this one waits its turn.
+  const { count: othersInProgress } = await supabase
+    .from("meetings")
+    .select("id", { count: "exact", head: true })
+    .neq("id", meeting.id)
+    .in("status", ["transcribing", "transcribed", "summarizing"]);
+
   return (
     <div className="flex flex-col gap-6">
       <RefreshWhile active={isInProgress(meeting)} />
@@ -139,7 +186,7 @@ async function MeetingDetails({ params }: { params: Promise<{ id: string }> }) {
           <span>{formatFileSize(meeting.file_size)}</span>
         </div>
       </header>
-      <MeetingBody meeting={meeting} />
+      <MeetingBody meeting={meeting} otherInProgress={!!othersInProgress} />
       {meeting.transcript?.trim() && (
         <TranscriptSection transcript={meeting.transcript} />
       )}

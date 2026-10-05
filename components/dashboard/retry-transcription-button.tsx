@@ -34,6 +34,8 @@ export function RetryTranscriptionButton({
     const showProgress = setTimeout(() => router.refresh(), 1000);
     const result = await processMeeting(meetingId, {
       hasTranscript,
+      onWaiting: () =>
+        toast(`"${title}" is waiting for your other meeting to finish.`),
       onTranscribed: () => router.refresh(),
     });
     clearTimeout(showProgress);

@@ -1,7 +1,10 @@
 import { PageHeader } from "@/components/dashboard/page-header";
+import { CreditHistory } from "@/components/dashboard/credit-history";
 import { FreePlanCard, ProPlanCard } from "@/components/dashboard/plan-cards";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getCreditBalance, getCreditHistory } from "@/lib/credits";
+import { meetingsFor } from "@/lib/plans";
 import { createClient } from "@/lib/supabase/server";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { Suspense } from "react";
@@ -38,14 +41,26 @@ async function Notices({ searchParams }: { searchParams: SearchParams }) {
 }
 
 async function Plan() {
-  // The user's own client: Row Level Security only returns their row.
+  // The user's own client: Row Level Security only returns their rows.
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("subscriptions")
-    .select("status, current_period_end, cancel_at_period_end")
-    .maybeSingle();
+  const [subscription, balance, history] = await Promise.allSettled([
+    supabase
+      .from("subscriptions")
+      .select("status, current_period_end, cancel_at_period_end")
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) throw error;
+        return data;
+      }),
+    getCreditBalance(),
+    getCreditHistory(),
+  ]);
 
-  if (error) {
+  if (
+    subscription.status === "rejected" ||
+    balance.status === "rejected" ||
+    history.status === "rejected"
+  ) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="size-4" />
@@ -56,7 +71,17 @@ async function Plan() {
     );
   }
 
-  return data ? <ProPlanCard subscription={data} /> : <FreePlanCard />;
+  const meetingsLeft = meetingsFor(balance.value);
+  return (
+    <>
+      {subscription.value ? (
+        <ProPlanCard subscription={subscription.value} meetingsLeft={meetingsLeft} />
+      ) : (
+        <FreePlanCard meetingsLeft={meetingsLeft} />
+      )}
+      <CreditHistory lines={history.value} />
+    </>
+  );
 }
 
 function PlanSkeleton() {

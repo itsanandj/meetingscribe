@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 const statusStyles: Record<MeetingStatus, { label: string; dot: string }> = {
   uploaded: { label: "Uploaded", dot: "bg-muted-foreground" },
   transcribing: { label: "Transcribing", dot: "bg-brand animate-pulse" },
+  // The transcript is saved and the summary is about to start.
+  transcribed: { label: "Summarizing", dot: "bg-brand animate-pulse" },
   summarizing: { label: "Summarizing", dot: "bg-brand animate-pulse" },
   done: { label: "Done", dot: "bg-emerald-500" },
   failed: { label: "Failed", dot: "bg-destructive" },

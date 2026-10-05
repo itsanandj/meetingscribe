@@ -14,6 +14,7 @@ import { uploadRecording } from "@/lib/upload-recording";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, FileAudio, Upload, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -34,7 +35,8 @@ function validate(file: File): string | null {
   return null;
 }
 
-export function UploadForm() {
+export function UploadForm({ meetingsLeft }: { meetingsLeft: number }) {
+  const router = useRouter();
   const dragDepth = useRef(0);
   const abortController = useRef<AbortController | null>(null);
 
@@ -52,6 +54,9 @@ export function UploadForm() {
   }, []);
 
   const isUploading = status === "uploading";
+  // Only a convenience: the server refuses to transcribe without credits.
+  const isOutOfMeetings = meetingsLeft < 1;
+  const isLocked = isUploading || isOutOfMeetings;
   const finalTitle = title.trim() || file?.name || "";
 
   const selectFile = (files: FileList | null) => {
@@ -114,11 +119,19 @@ export function UploadForm() {
     const uploadedTitle = finalTitle;
     void processMeeting(meeting.id, {
       hasTranscript: false,
-      onTranscribed: () =>
-        toast(`Transcript ready for "${uploadedTitle}". Summarizing now…`),
+      onWaiting: () =>
+        toast(`"${uploadedTitle}" is waiting for your other meeting to finish.`),
+      onTranscribed: () => {
+        toast(`Transcript ready for "${uploadedTitle}". Summarizing now…`);
+        // The credit was taken when transcription started.
+        router.refresh();
+      },
     }).then((result) => {
       if (result.ok) toast.success(`Summary ready for "${uploadedTitle}"`);
-      else toast.error(`"${uploadedTitle}": ${result.message}`);
+      // "not_allowed" here means the meeting page already started it.
+      else if (result.code !== "not_allowed") {
+        toast.error(`"${uploadedTitle}": ${result.message}`);
+      }
     });
   };
 
@@ -161,17 +174,33 @@ export function UploadForm() {
   return (
     <Card className="shadow-none">
       <CardContent className="flex flex-col gap-6 pt-6">
+        {isOutOfMeetings ? (
+          <Alert>
+            <AlertCircle className="size-4" />
+            <AlertDescription>
+              You&apos;re out of meetings.{" "}
+              <Link href="/dashboard/billing" className="font-medium underline underline-offset-4">
+                Upgrade on the Billing page
+              </Link>{" "}
+              to upload more.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {meetingsLeft} {meetingsLeft === 1 ? "meeting" : "meetings"} left
+          </p>
+        )}
         <label
           htmlFor="recording"
           onDragEnter={(e) => {
             e.preventDefault();
-            if (isUploading) return;
+            if (isLocked) return;
             dragDepth.current += 1;
             setIsDragging(true);
           }}
           onDragOver={(e) => {
             e.preventDefault();
-            e.dataTransfer.dropEffect = isUploading ? "none" : "copy";
+            e.dataTransfer.dropEffect = isLocked ? "none" : "copy";
           }}
           onDragLeave={() => {
             dragDepth.current -= 1;
@@ -181,14 +210,14 @@ export function UploadForm() {
             e.preventDefault();
             dragDepth.current = 0;
             setIsDragging(false);
-            if (!isUploading) selectFile(e.dataTransfer.files);
+            if (!isLocked) selectFile(e.dataTransfer.files);
           }}
           className={cn(
             "flex min-h-56 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 py-10 text-center transition-colors focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/20",
             isDragging
               ? "border-brand bg-brand/5"
               : "border-border hover:border-muted-foreground/40 hover:bg-muted/40",
-            isUploading && "pointer-events-none opacity-50",
+            isLocked && "pointer-events-none opacity-50",
           )}
         >
           <input
@@ -196,7 +225,7 @@ export function UploadForm() {
             type="file"
             accept=".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav"
             className="sr-only"
-            disabled={isUploading}
+            disabled={isLocked}
             onChange={(e) => {
               selectFile(e.target.files);
               e.target.value = "";
@@ -282,7 +311,7 @@ export function UploadForm() {
         </div>
       </CardContent>
       <CardFooter className="justify-end border-t pt-6">
-        <Button onClick={startUpload} disabled={!file || isUploading}>
+        <Button onClick={startUpload} disabled={!file || isLocked}>
           {isUploading ? "Uploading…" : "Upload"}
         </Button>
       </CardFooter>
