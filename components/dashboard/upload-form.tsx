@@ -7,7 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { formatFileSize } from "@/lib/format";
-import { RECORDINGS_BUCKET } from "@/lib/meetings";
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MB,
+  RECORDINGS_BUCKET,
+} from "@/lib/meetings";
 import { processMeeting } from "@/lib/process-meeting";
 import { createClient } from "@/lib/supabase/client";
 import { uploadRecording } from "@/lib/upload-recording";
@@ -19,15 +23,14 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const ACCEPTED_EXTENSIONS = ["mp3", "m4a", "wav"];
-const MAX_BYTES = 25 * 1024 * 1024;
 
 function validate(file: File): string | null {
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
   if (!ACCEPTED_EXTENSIONS.includes(extension)) {
     return `"${file.name}" isn't a supported file. Choose an MP3, M4A or WAV file.`;
   }
-  if (file.size > MAX_BYTES) {
-    return `"${file.name}" is ${formatFileSize(file.size)}. Files can be up to 25 MB.`;
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return `"${file.name}" is ${formatFileSize(file.size)}. Files can be up to ${MAX_UPLOAD_MB} MB.`;
   }
   if (file.size === 0) {
     return `"${file.name}" is empty. Choose a file with audio in it.`;
@@ -246,7 +249,7 @@ export function UploadForm({ meetingsLeft }: { meetingsLeft: number }) {
                 : "Drag an audio file here, or click to choose"}
             </p>
             <p className="text-xs text-muted-foreground">
-              MP3, M4A or WAV · up to 25 MB
+              MP3, M4A or WAV · up to {MAX_UPLOAD_MB} MB
             </p>
           </div>
         </label>

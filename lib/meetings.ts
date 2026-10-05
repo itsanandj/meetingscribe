@@ -1,5 +1,13 @@
 export const RECORDINGS_BUCKET = "recordings";
 
+/**
+ * The largest recording people can upload. The recordings bucket enforces
+ * the same limit (file_size_limit in the create_meetings_and_recordings
+ * migration), so change both together.
+ */
+export const MAX_UPLOAD_MB = 25;
+export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
 export type MeetingStatus =
   | "uploaded"
   | "transcribing"

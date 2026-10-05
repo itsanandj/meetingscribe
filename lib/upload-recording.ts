@@ -1,4 +1,4 @@
-import { RECORDINGS_BUCKET } from "@/lib/meetings";
+import { MAX_UPLOAD_MB, RECORDINGS_BUCKET } from "@/lib/meetings";
 import { createClient } from "@/lib/supabase/client";
 import * as tus from "tus-js-client";
 
@@ -27,7 +27,7 @@ function friendlyError(error: Error) {
   if (status === 401 || status === 403) {
     return "You don't have permission to upload. Sign in again and retry.";
   }
-  if (status === 413) return "That file is too large. Files can be up to 25 MB.";
+  if (status === 413) return `That file is too large. Files can be up to ${MAX_UPLOAD_MB} MB.`;
   if (status === 415) return "That file type isn't supported.";
   return "The upload failed. Check your connection and try again.";
 }
